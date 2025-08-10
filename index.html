@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+   <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -19,7 +19,7 @@
         }
         .btn {
             transition: all 0.2s ease-in-out;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1-rgba(0, 0, 0, 0.06);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
         }
         .btn:hover {
             transform: translateY(-2px);
@@ -116,20 +116,13 @@
         </div>
     </div>
 
-    <!-- Firebase SDKs and main script -->
+    <!-- Main script -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // --- Firebase Configuration ---
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
+        // Configuration - Replace with your actual Firebase config
+        const firebaseConfig = {
+            // Add your Firebase configuration here
+            // For now, the app will work in offline-only mode
+        };
 
         // Get references to all the necessary HTML elements
         const itemInput = document.getElementById('itemInput');
@@ -151,7 +144,6 @@
 
         let currentList = [];
         let editingIndex = -1; // -1 indicates no item is being edited
-        let userId = null;
         let isOnline = navigator.onLine;
 
         const groceryStores = [
@@ -163,83 +155,93 @@
             "Schnucks", "ShopRite", "Stater Bros. Markets", "Fred Meyer", "Vons"
         ].sort();
 
-        // --- Firebase Authentication and Data Sync ---
-        // Use onAuthStateChanged to handle authentication state changes
-        onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                userId = user.uid;
-                console.log("User authenticated:", userId);
-                await initializeData();
-            } else {
-                // Sign in with the provided custom token if available, otherwise sign in anonymously
-                if (typeof __initial_auth_token !== 'undefined') {
-                    try {
-                        await signInWithCustomToken(auth, __initial_auth_token);
-                    } catch (error) {
-                        console.error("Failed to sign in with custom token, signing in anonymously:", error);
-                        await signInAnonymously(auth);
-                    }
-                } else {
-                    await signInAnonymously(auth);
-                }
-            }
-        });
-
-        async function initializeData() {
-            // First, load from localStorage as the immediate, offline source
-            renderSavedListsFromLocal();
-
-            // Set up a real-time listener for Firestore data
-            const userListsCollection = collection(db, `artifacts/${appId}/users/${userId}/savedLists`);
-            onSnapshot(userListsCollection, (snapshot) => {
-                const cloudLists = {};
-                snapshot.docs.forEach(doc => {
-                    cloudLists[doc.id] = doc.data();
-                });
-                syncWithCloud(cloudLists);
-            }, (error) => {
-                console.error("Firestore sync failed:", error);
-                // Since Firestore failed, we rely purely on localStorage
+        // Initialize the app
+        async function initializeApp() {
+            try {
+                // For now, we'll work in offline-only mode
+                // You can add Firebase initialization here later
+                console.log("App initialized in offline mode");
+                renderCurrentList();
                 renderSavedListsFromLocal();
+                updateAddItemButton();
+                toggleClearButton();
+                showMessage("App loaded successfully! Working in offline mode.", 'success');
+            } catch (error) {
+                console.error("Error initializing app:", error);
+                showMessage("Error initializing app. Working in offline mode.", 'error');
+            }
+        }
+
+        // Function to show messages to the user
+        function showMessage(message, type) {
+            messageAlert.textContent = message;
+            messageAlert.className = `mt-4 p-4 rounded-lg text-white font-semibold ${
+                type === 'success' ? 'bg-green-500' :
+                type === 'error' ? 'bg-red-500' :
+                type === 'blue' ? 'bg-blue-500' : 'bg-gray-500'
+            }`;
+            messageAlert.classList.remove('hidden');
+            
+            setTimeout(() => {
+                messageAlert.classList.add('hidden');
+            }, 5000);
+        }
+
+        // Function to render the current list
+        function renderCurrentList() {
+            currentListElement.innerHTML = '';
+            currentList.forEach((item, index) => {
+                const li = document.createElement('li');
+                li.className = `flex items-center justify-between p-3 bg-gray-100 rounded-lg ${editingIndex === index ? 'editing-item' : ''}`;
+                li.innerHTML = `
+                    <span class="flex-grow">${item}</span>
+                    <div class="flex space-x-2">
+                        <button class="btn bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-1 px-2 rounded text-sm" data-action="edit-item" data-index="${index}">Edit</button>
+                        <button class="btn bg-red-500 hover:bg-red-600 text-white font-semibold py-1 px-2 rounded text-sm" data-action="delete-item" data-index="${index}">Delete</button>
+                    </div>
+                `;
+                currentListElement.appendChild(li);
             });
         }
 
-        // Function to synchronize local storage with the cloud data
-        function syncWithCloud(cloudLists) {
-            const localLists = JSON.parse(localStorage.getItem('groceryLists')) || {};
-            let mergedLists = { ...localLists };
+        // Function to render saved lists from localStorage
+        function renderSavedListsFromLocal() {
+            const savedLists = JSON.parse(localStorage.getItem('groceryLists')) || {};
+            savedListsContainer.innerHTML = '';
 
-            // Merge cloud data with local data
-            for (const listName in cloudLists) {
-                mergedLists[listName] = cloudLists[listName];
+            if (Object.keys(savedLists).length === 0) {
+                savedListsContainer.innerHTML = '<p class="text-gray-500 text-center">No saved lists yet.</p>';
+                return;
             }
 
-            // Remove items from local storage that were deleted from the cloud
-            for (const listName in localLists) {
-                if (!cloudLists.hasOwnProperty(listName)) {
-                    delete mergedLists[listName];
-                }
-            }
-            
-            localStorage.setItem('groceryLists', JSON.stringify(mergedLists));
-            renderSavedListsFromLocal();
+            Object.entries(savedLists).forEach(([listName, listData]) => {
+                const listElement = document.createElement('div');
+                listElement.className = 'card p-4 mb-3';
+                listElement.innerHTML = `
+                    <h3 class="font-semibold text-lg mb-2">${listName}</h3>
+                    <p class="text-gray-600 text-sm mb-3">${listData.items.length} items</p>
+                    <div class="flex flex-wrap gap-2">
+                        <button class="btn bg-blue-500 hover:bg-blue-600 text-white font-semibold py-1 px-3 rounded text-sm" data-action="load" data-list-name="${listName}">Load</button>
+                        <button class="btn bg-green-500 hover:bg-green-600 text-white font-semibold py-1 px-3 rounded text-sm" data-action="edit" data-list-name="${listName}">Edit</button>
+                        <button class="btn bg-gray-500 hover:bg-gray-600 text-white font-semibold py-1 px-3 rounded text-sm" data-action="copy" data-list-name="${listName}">Copy</button>
+                        <button class="btn bg-red-500 hover:bg-red-600 text-white font-semibold py-1 px-3 rounded text-sm" data-action="delete" data-list-name="${listName}">Delete</button>
+                    </div>
+                `;
+                savedListsContainer.appendChild(listElement);
+            });
         }
 
-        // --- Utility Functions ---
-
-        // Function to update the text and style of the main action button
+        // Function to update the Add Item button text based on editing state
         function updateAddItemButton() {
-            if (editingIndex !== -1) {
+            if (editingIndex >= 0) {
                 addItemBtn.textContent = 'Update Item';
-                addItemBtn.classList.remove('bg-blue-500', 'hover:bg-blue-600');
-                addItemBtn.classList.add('bg-green-500', 'hover:bg-green-600');
+                addItemBtn.className = 'btn bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-3 px-4 rounded-lg sm:w-36';
             } else {
                 addItemBtn.textContent = 'Add Item';
-                addItemBtn.classList.remove('bg-green-500', 'hover:bg-green-600');
-                addItemBtn.classList.add('bg-blue-500', 'hover:bg-blue-600');
+                addItemBtn.className = 'btn bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg sm:w-36';
             }
         }
-        
+
         // Function to toggle the visibility of the Clear List button
         function toggleClearButton() {
             if (currentList.length > 0) {
@@ -249,146 +251,79 @@
             }
         }
 
-        // Function to render the current grocery list on the page
-        function renderCurrentList() {
-            currentListElement.innerHTML = ''; // Clear the list before re-rendering
-            currentList.forEach((item, index) => {
-                const listItem = document.createElement('li');
-                listItem.className = `flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-200 ${index === editingIndex ? 'editing-item' : ''}`;
-                listItem.innerHTML = `
-                    <span class="text-gray-800">${item}</span>
-                    <div class="flex space-x-2">
-                        <button class="text-blue-500 hover:text-blue-700 font-semibold text-sm" data-index="${index}" data-action="edit-item">Edit</button>
-                        <button class="text-red-500 hover:text-red-700 font-semibold text-sm" data-index="${index}" data-action="delete-item">Delete</button>
-                    </div>
-                `;
-                currentListElement.appendChild(listItem);
-            });
-            toggleClearButton();
-        }
-
-        // Function to render the saved lists from localStorage
-        function renderSavedListsFromLocal() {
-            savedListsContainer.innerHTML = '';
-            const savedLists = JSON.parse(localStorage.getItem('groceryLists')) || {};
-
-            const sortedListNames = Object.keys(savedLists).sort((a, b) => {
-                const dateA = new Date(savedLists[a].timestamp);
-                const dateB = new Date(savedLists[b].timestamp);
-                return dateB - dateA;
-            });
-            
-            if (sortedListNames.length === 0) {
-                savedListsContainer.innerHTML = '<p class="text-center text-gray-500">No saved lists found.</p>';
-            }
-
-            sortedListNames.forEach(listName => {
-                const listData = savedLists[listName];
-                const savedListEntry = document.createElement('div');
-                savedListEntry.className = 'w-full p-3 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors duration-200';
-                savedListEntry.innerHTML = `
-                    <div class="flex items-center justify-between mb-2">
-                        <button class="text-left flex-grow text-gray-800 font-medium" data-list-name="${listName}" data-action="load">${listName}</button>
-                        <div class="flex space-x-2">
-                            <button class="text-blue-500 hover:text-blue-700 font-semibold text-sm" data-list-name="${listName}" data-action="edit">Edit</button>
-                            <button class="text-red-500 hover:text-red-700 font-semibold text-sm" data-list-name="${listName}" data-action="delete">Delete</button>
-                            <button class="text-green-500 hover:text-green-700 font-semibold text-sm" data-list-name="${listName}" data-action="copy">Copy</button>
-                        </div>
-                    </div>
-                    <span class="text-gray-500 text-xs">${new Date(listData.timestamp).toLocaleString()}</span>
-                `;
-                savedListsContainer.appendChild(savedListEntry);
-            });
-        }
-
-        // Function to show a temporary message alert
-        function showMessage(message, type) {
-            messageAlert.textContent = message;
-            messageAlert.classList.remove('hidden', 'bg-red-500', 'bg-green-500', 'bg-blue-500');
-            
-            if (type === 'success') {
-                messageAlert.classList.add('bg-green-500');
-            } else if (type === 'error') {
-                messageAlert.classList.add('bg-red-500');
-            } else {
-                messageAlert.classList.add('bg-blue-500');
-            }
-
-            setTimeout(() => {
-                messageAlert.classList.add('hidden');
-            }, 3000);
-        }
-
-        // Function to copy text to the clipboard
-        function copyToClipboard(text) {
-            const textarea = document.createElement('textarea');
-            textarea.value = text;
-            textarea.style.position = 'fixed'; // Prevents scrolling to bottom of page in some browsers
-            document.body.appendChild(textarea);
-            textarea.select();
+        // Function to copy text to clipboard
+        async function copyToClipboard(text) {
             try {
-                document.execCommand('copy');
+                await navigator.clipboard.writeText(text);
                 showMessage('List copied to clipboard!', 'success');
             } catch (err) {
-                console.error('Failed to copy text:', err);
-                showMessage('Failed to copy list to clipboard.', 'error');
+                console.error('Failed to copy: ', err);
+                showMessage('Failed to copy to clipboard.', 'error');
             }
-            document.body.removeChild(textarea);
         }
 
-        // --- Event Listeners ---
-
-        // Event listener for adding/editing a new item
+        // Event listener for adding or updating an item
         addItemBtn.addEventListener('click', () => {
             const item = itemInput.value.trim();
             if (!item) {
-                showMessage('Please enter an item.', 'error');
+                showMessage('Please enter an item name.', 'error');
                 return;
             }
 
-            if (editingIndex !== -1) {
-                // We are in edit mode, so update the existing item
+            if (editingIndex >= 0) {
+                // Update existing item
                 currentList[editingIndex] = item;
-                editingIndex = -1; // Reset to no editing mode
+                editingIndex = -1; // Reset editing mode
+                showMessage('Item updated successfully!', 'success');
             } else {
-                // Not in edit mode, so add a new item
+                // Add new item
+                if (currentList.includes(item)) {
+                    showMessage('This item is already in your list.', 'error');
+                    return;
+                }
                 currentList.push(item);
+                showMessage('Item added successfully!', 'success');
             }
 
-            itemInput.value = ''; // Clear the input field
-            renderCurrentList();
-            updateAddItemButton(); // Update the button state
-        });
-        
-        // Event listener for clearing the current list
-        clearListBtn.addEventListener('click', () => {
-            currentList = [];
-            editingIndex = -1;
             itemInput.value = '';
-            listNameInput.value = '';
             renderCurrentList();
             updateAddItemButton();
-            showMessage('Current list has been cleared.', 'success');
+            toggleClearButton();
         });
 
-        // Event listener for dynamic supermarket name suggestions
-        listNameInput.addEventListener('input', (event) => {
-            const input = event.target.value.trim();
-            autocompleteContainer.innerHTML = '';
-            nameWarning.classList.add('hidden');
-            autocompleteContainer.classList.add('hidden');
-
-            if (input.length === 0) {
-                return;
+        // Event listener for Enter key in item input
+        itemInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                addItemBtn.click();
             }
+        });
 
-            if (input.length > 2) {
+        // Event listener for clearing the current list
+        clearListBtn.addEventListener('click', () => {
+            if (confirm('Are you sure you want to clear the current list?')) {
+                currentList = [];
+                editingIndex = -1;
+                renderCurrentList();
+                updateAddItemButton();
+                toggleClearButton();
+                showMessage('List cleared successfully!', 'success');
+            }
+        });
+
+        // Event listener for autocomplete functionality
+        listNameInput.addEventListener('input', () => {
+            const query = listNameInput.value.toLowerCase();
+            autocompleteContainer.innerHTML = '';
+
+            if (query.length < 2) {
+                autocompleteContainer.classList.add('hidden');
                 nameWarning.classList.remove('hidden');
                 return;
             }
 
-            const filteredStores = groceryStores.filter(store =>
-                store.toLowerCase().startsWith(input.toLowerCase())
+            nameWarning.classList.add('hidden');
+            const filteredStores = groceryStores.filter(store => 
+                store.toLowerCase().includes(query)
             );
 
             if (filteredStores.length > 0) {
@@ -403,6 +338,8 @@
                     });
                     autocompleteContainer.appendChild(suggestion);
                 });
+            } else {
+                autocompleteContainer.classList.add('hidden');
             }
         });
 
@@ -418,24 +355,13 @@
                 return;
             }
 
-            // Prepare data for both storage methods
+            // Prepare data for storage
             const listData = {
                 items: currentList,
                 timestamp: new Date().toISOString()
             };
 
-            // Save to Firestore (if online)
-            if (isOnline) {
-                const docRef = doc(db, `artifacts/${appId}/users/${userId}/savedLists`, listName);
-                await setDoc(docRef, { ...listData, serverTimestamp: serverTimestamp() }).catch(e => {
-                    console.error("Failed to save to Firestore:", e);
-                    showMessage('Failed to save to cloud. Saving locally.', 'error');
-                });
-            } else {
-                showMessage('You are offline. Saving locally.', 'blue');
-            }
-
-            // Always save to localStorage for offline functionality
+            // Save to localStorage
             const localLists = JSON.parse(localStorage.getItem('groceryLists')) || {};
             localLists[listName] = listData;
             localStorage.setItem('groceryLists', JSON.stringify(localLists));
@@ -445,24 +371,14 @@
             editingIndex = -1; // Reset editing mode
             renderCurrentList();
             renderSavedListsFromLocal();
-            updateAddItemButton(); // Update the button state
+            updateAddItemButton();
+            toggleClearButton();
             showMessage(`List "${listName}" saved successfully!`, 'success');
         });
 
-        // Function to delete a list from both sources
+        // Function to delete a list
         async function deleteList(listName) {
-            // Delete from Firestore (if online)
-            if (isOnline) {
-                const docRef = doc(db, `artifacts/${appId}/users/${userId}/savedLists`, listName);
-                await deleteDoc(docRef).catch(e => {
-                    console.error("Failed to delete from Firestore:", e);
-                    showMessage('Failed to delete from cloud. Deleting locally.', 'error');
-                });
-            } else {
-                showMessage('You are offline. Deleting locally.', 'blue');
-            }
-
-            // Always delete from localStorage
+            // Delete from localStorage
             const localLists = JSON.parse(localStorage.getItem('groceryLists')) || {};
             delete localLists[listName];
             localStorage.setItem('groceryLists', JSON.stringify(localLists));
@@ -485,7 +401,8 @@
                 renderCurrentList();
                 listNameInput.value = ''; // Clear the list name input
                 editingIndex = -1; // Reset editing mode
-                updateAddItemButton(); // Update the button state
+                updateAddItemButton();
+                toggleClearButton();
                 showMessage(`List "${listName}" loaded.`, 'success');
             } else if (action === 'edit') {
                 const savedLists = JSON.parse(localStorage.getItem('groceryLists')) || {};
@@ -493,7 +410,8 @@
                 renderCurrentList();
                 listNameInput.value = listName; // Pre-fill the input with the list name
                 editingIndex = -1; // Reset editing mode
-                updateAddItemButton(); // Update the button state
+                updateAddItemButton();
+                toggleClearButton();
                 showMessage(`List "${listName}" loaded for editing.`, 'success');
             } else if (action === 'delete') {
                 // Show the confirmation modal instead of deleting immediately
@@ -524,12 +442,15 @@
                 currentList.splice(index, 1);
                 editingIndex = -1; // Reset editing mode
                 renderCurrentList();
-                updateAddItemButton(); // Update the button state
+                updateAddItemButton();
+                toggleClearButton();
+                showMessage('Item deleted successfully!', 'success');
             } else if (action === 'edit-item') {
                 itemInput.value = currentList[index];
                 editingIndex = index; // Set the index of the item being edited
                 renderCurrentList();
-                updateAddItemButton(); // Update the button state
+                updateAddItemButton();
+                itemInput.focus();
             }
         });
         
@@ -546,6 +467,13 @@
             deleteModal.classList.add('hidden');
         });
 
+        // Close modal when clicking outside
+        deleteModal.addEventListener('click', (event) => {
+            if (event.target === deleteModal) {
+                deleteModal.classList.add('hidden');
+            }
+        });
+
         // Offline/Online status detection
         window.addEventListener('offline', () => {
             isOnline = false;
@@ -554,14 +482,12 @@
 
         window.addEventListener('online', () => {
             isOnline = true;
-            showMessage("You are now online. Syncing changes...", 'success');
-            // Data is automatically synced via the onSnapshot listener, no manual sync needed here.
+            showMessage("You are now online.", 'success');
         });
 
-        // Initial calls to render the lists on page load
-        renderCurrentList();
-        updateAddItemButton();
-        toggleClearButton();
+        // Initialize the app when the page loads
+        initializeApp();
     </script>
 </body>
-</html>
+</html>         
+
